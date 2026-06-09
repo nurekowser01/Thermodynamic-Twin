@@ -1,0 +1,401 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg0: #0f1117;
+  --bg1: #161b25;
+  --bg2: #1d2535;
+  --bg3: #252e42;
+  --border: #2e3a52;
+  --border2: #3a4a68;
+  --text0: #e8ecf4;
+  --text1: #b0bcd4;
+  --text2: #6e7e9e;
+  --accent: #4a7fe8;
+  --accent2: #2e5ec4;
+  --green: #2db87a;
+  --orange: #e8883a;
+  --red: #e85050;
+  --purple: #8b6fe8;
+  --yellow: #e8c43a;
+  --input-bg: #0d1220;
+  --input-border: #2a3550;
+  --input-focus: #4a7fe8;
+  --tag-bg: #1a2236;
+  --tag-border: #2e3a52;
+  --font: 'Segoe UI', 'Inter', system-ui, sans-serif;
+  --mono: 'Cascadia Code', 'Consolas', 'JetBrains Mono', monospace;
+  --r: 6px;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg0);
+  color: var(--text0);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* ── Scrollbars ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg1); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* ── App shell ── */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Title bar ── */
+.title-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  height: 44px;
+  background: var(--bg1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  user-select: none;
+}
+.title-bar .plant-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text0);
+  letter-spacing: 0.3px;
+}
+.title-bar .gt-tag {
+  font-size: 11px;
+  color: var(--text2);
+  padding: 2px 7px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: var(--mono);
+}
+.title-bar .status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  margin-left: auto;
+  box-shadow: 0 0 6px var(--green);
+}
+.title-bar .status-label {
+  font-size: 11px;
+  color: var(--text2);
+}
+
+/* ── Tab bar ── */
+.tab-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 16px;
+  background: var(--bg1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  height: 36px;
+}
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text2);
+  font-size: 12px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.tab-btn:hover { color: var(--text1); }
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.tab-btn .tab-icon { font-size: 14px; }
+
+/* ── Tab content ── */
+.tab-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Canvas tab ── */
+.canvas-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+.canvas-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: var(--bg1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.mode-toggle {
+  display: flex;
+  background: var(--bg0);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.mode-btn {
+  padding: 5px 14px;
+  background: transparent;
+  border: none;
+  color: var(--text2);
+  font-size: 12px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.mode-btn.active {
+  background: var(--accent2);
+  color: #fff;
+}
+.fuel-toggle {
+  display: flex;
+  background: var(--bg0);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.fuel-btn {
+  padding: 5px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text2);
+  font-size: 12px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.fuel-btn.active {
+  background: var(--orange);
+  color: #fff;
+}
+.calc-btn {
+  margin-left: auto;
+  padding: 6px 20px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--r);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  letter-spacing: 0.3px;
+}
+.calc-btn:hover { background: var(--accent2); }
+.calc-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.calc-btn.loading { opacity: 0.7; }
+
+.canvas-area {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  position: relative;
+}
+
+/* ── P&ID SVG canvas ── */
+.pid-canvas {
+  width: 100%;
+  min-width: 900px;
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: visible;
+}
+
+/* ── Input fields on canvas ── */
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.field-label {
+  font-size: 10px;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.field-input {
+  width: 90px;
+  padding: 4px 6px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  color: var(--text0);
+  font-size: 12px;
+  font-family: var(--mono);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.field-input:focus { border-color: var(--input-focus); }
+.field-input.result {
+  background: var(--tag-bg);
+  border-color: var(--border2);
+  color: var(--green);
+  cursor: default;
+}
+.field-input.warn  { color: var(--orange); }
+.field-input.alert { color: var(--red); }
+
+/* ── Stream value badges (on SVG lines) ── */
+.stream-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+/* ── Chart tabs shared layout ── */
+.chart-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+.chart-tab-header {
+  padding: 10px 20px 0;
+  flex-shrink: 0;
+}
+.chart-tab-header h2 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text1);
+  letter-spacing: 0.3px;
+}
+.chart-tab-header p {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 2px;
+}
+.chart-body {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.chart-row {
+  display: grid;
+  gap: 12px;
+}
+.chart-row-2 { grid-template-columns: 1fr 1fr; }
+.chart-row-1 { grid-template-columns: 1fr; }
+
+.chart-card {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 14px;
+}
+.chart-card-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+/* ── KPI strip ── */
+.kpi-strip {
+  display: grid;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.kpi-strip-5 { grid-template-columns: repeat(5,1fr); }
+.kpi-strip-4 { grid-template-columns: repeat(4,1fr); }
+.kpi-strip-3 { grid-template-columns: repeat(3,1fr); }
+.kpi-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 8px 12px;
+}
+.kpi-label { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.4px; }
+.kpi-val   { font-size: 18px; font-weight: 600; color: var(--text0); font-family: var(--mono); margin-top: 2px; }
+.kpi-unit  { font-size: 11px; font-weight: 400; color: var(--text2); margin-left: 2px; }
+.kpi-delta { font-size: 11px; margin-top: 2px; }
+.kpi-delta.pos { color: var(--green); }
+.kpi-delta.neg { color: var(--red); }
+.kpi-delta.neu { color: var(--text2); }
+
+/* ── Legend ── */
+.legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text2);
+}
+.legend-item { display: flex; align-items: center; gap: 5px; }
+.legend-line {
+  width: 22px; height: 2px; border-radius: 1px; display: inline-block;
+}
+
+/* ── Filter stage inputs ── */
+.filter-inputs {
+  display: grid;
+  grid-template-columns: repeat(3,1fr);
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+}
+.filter-input-card label {
+  display: block;
+  font-size: 10px;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 4px;
+}
+.filter-input-card input {
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  color: var(--text0);
+  font-family: var(--mono);
+  font-size: 12px;
+  outline: none;
+}
+.filter-input-card input:focus { border-color: var(--input-focus); }
+
+/* ── No result placeholder ── */
+.no-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 8px;
+  color: var(--text2);
+  font-size: 12px;
+}
+.no-result .icon { font-size: 32px; opacity: 0.3; }
+
+/* Recharts overrides */
+.recharts-text { fill: var(--text2) !important; }
+.recharts-cartesian-grid line { stroke: var(--border) !important; }
+.recharts-tooltip-wrapper { font-size: 12px; }
