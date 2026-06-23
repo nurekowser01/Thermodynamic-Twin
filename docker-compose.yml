@@ -1,8 +1,37 @@
 services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    expose:
+      - "11434"
+    mem_limit: 8g
+
+  llm-advisor:
+    build: ./llm-service
+    expose:
+      - "11435"
+    mem_limit: 4g
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: llama3.2:3b
+      OLLAMA_REQUEST_TIMEOUT: "120"
+      TEMPERATURE: "0.3"
+      CORS_ORIGINS: http://localhost:8080
+      LOG_LEVEL: INFO
+    depends_on:
+      - ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11435/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build: ./backend
     expose:
       - "8749"
+    mem_limit: 2g
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8749/health"]
       interval: 10s
@@ -13,6 +42,10 @@ services:
     build: ./frontend
     ports:
       - "8080:80"
+    mem_limit: 512m
     depends_on:
       backend:
         condition: service_healthy
+
+volumes:
+  ollama_data:

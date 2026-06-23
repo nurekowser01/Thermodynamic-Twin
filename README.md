@@ -28,7 +28,9 @@ sirajganj_app/
 │           ├── PerformanceTab.jsx  ← OEM curves + compressor efficiency map
 │           ├── ThermodynamicsTab.jsx ← T-s and P-h Brayton cycle diagrams
 │           ├── EnergyTab.jsx       ← Sankey energy flow + heat balance table
-│           └── FilterTab.jsx       ← ΔP degradation curves + live hour inputs
+│           ├── FilterTab.jsx       ← ΔP degradation curves + live hour inputs
+│           └── AssistantTab.jsx    ← LLM advisor chat (Docker only)
+├── llm-service/    ← Independent LLM advisor API (port 11435)
 ├── run_dev.sh      ← Linux/macOS launcher
 ├── run_dev.bat     ← Windows launcher
 └── README.md
@@ -81,12 +83,19 @@ Open **http://localhost:5173** in your browser.
 docker compose up --build
 ```
 
+Pull the Ollama model (first time only, ~2 GB for llama3.2:3b):
+
+```bash
+docker compose exec ollama ollama pull llama3.2:3b
+```
+
 Open **http://localhost:8080** in your browser.
 
 - `docker compose up --build` — first run or rebuild images
 - `docker compose down` — stop containers
-- API docs — **http://localhost:8080/api/docs**
-- Local dev without Docker — use `run_dev.sh` / `run_dev.bat` above
+- Solver API docs — **http://localhost:8080/api/docs**
+- Advisor API docs — **http://localhost:8080/api/llm/docs**
+- Local dev without Docker — use `run_dev.sh` / `run_dev.bat` (Assistant tab requires Docker)
 
 ### Troubleshooting Docker
 
@@ -108,6 +117,65 @@ ports:
 
 ---
 
+## LLM Advisor
+
+Independent chat service for plant operations guidance. Runs in its own container (`llm-advisor`) and uses Ollama for local inference. The thermodynamic solver backend is unchanged.
+
+### Architecture
+
+| Service | Port (internal) | Role |
+|---------|-----------------|------|
+| frontend (nginx) | 8080 (host) | SPA + proxies `/api/*` and `/api/llm/*` |
+| backend | 8749 | Thermodynamic solver |
+| llm-advisor | 11435 | Chat API |
+| ollama | 11434 | Local LLM inference |
+
+### Health check
+
+```bash
+curl http://localhost:8080/api/llm/health
+```
+
+- `"status": "healthy"` — Ollama reachable and model loaded
+- `"status": "degraded"` — Ollama down or model not pulled (`model_ready: false`)
+
+### Example chat
+
+```bash
+curl -X POST http://localhost:8080/api/llm/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "What affects heat rate at high ambient temperature?"}'
+```
+
+Send plant context from the **Assistant** tab (inputs + solver results after Calculate).
+
+### Configuration
+
+Edit `environment:` under `llm-advisor` in [`docker-compose.yml`](docker-compose.yml). See [`.env.example`](.env.example) for reference.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `OLLAMA_MODEL` | `llama3.2:3b` | Model tag |
+| `TEMPERATURE` | `0.3` | Response creativity |
+| `OLLAMA_REQUEST_TIMEOUT` | `120` | Seconds |
+| `OLLAMA_MEMORY_LIMIT` | `8g` | Ollama container memory |
+| `LLM_MEMORY_LIMIT` | `4g` | Advisor container memory |
+
+### Troubleshooting LLM Advisor
+
+**Advisor degraded / model not ready**:
+```bash
+docker compose exec ollama ollama pull llama3.2:3b
+```
+
+**Chat returns 503**: Check Ollama is running: `docker compose ps`
+
+**Out of memory**: Use a smaller model (e.g. `llama3.2:1b`) or increase `mem_limit` in compose.
+
+**GPU (optional)**: Add NVIDIA device reservation to the `ollama` service in `docker-compose.yml` (see `.env.example` comment).
+
+---
+
 ## Application Tabs
 
 | Tab | Description |
@@ -117,6 +185,7 @@ ports:
 | **Thermodynamics** | T-s and P-h Brayton cycle diagrams. Isentropic vs actual compression and expansion paths. Six state points with full property table. |
 | **Energy Balance** | Sankey energy flow (MW proportional). Heat balance table. Auxiliary load breakdown table. |
 | **Filter ΔP** | Degradation curves for coalescer, pre-filter, and fine filter. Life-fraction progress bars. ISO 8 hPa reference line. Design-point consistency note. |
+| **Assistant** | Chat with local LLM advisor. Uses current inputs and solver results as context. Requires Docker stack with Ollama model pulled. |
 
 ---
 

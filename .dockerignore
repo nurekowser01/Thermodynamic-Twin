@@ -9,6 +9,9 @@ __pycache__/
 .venv/
 backend/.env
 
+# LLM service
+llm-service/__pycache__/
+
 # Version control
 .git/
 .gitignore

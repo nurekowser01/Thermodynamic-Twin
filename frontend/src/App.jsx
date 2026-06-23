@@ -6,6 +6,7 @@ import PerformanceTab  from './tabs/PerformanceTab'
 import ThermodynamicsTab from './tabs/ThermodynamicsTab'
 import EnergyTab       from './tabs/EnergyTab'
 import FilterTab       from './tabs/FilterTab'
+import AssistantTab    from './tabs/AssistantTab'
 
 const TABS = [
   { id: 'canvas',  label: 'P&ID Canvas',    icon: '⬡' },
@@ -13,6 +14,7 @@ const TABS = [
   { id: 'thermo',  label: 'Thermodynamics', icon: '⚗' },
   { id: 'energy',  label: 'Energy Balance', icon: '⚡' },
   { id: 'filter',  label: 'Filter ΔP',     icon: '🔽' },
+  { id: 'assistant', label: 'Assistant',    icon: '💬' },
 ]
 
 const DEFAULT_INPUTS = {
@@ -187,6 +189,15 @@ export default function App() {
             staticData={staticData}
             inputs={inputs}
             onInputChange={handleInputChange}
+          />
+        )}
+        {tab === 'assistant' && (
+          <AssistantTab
+            mode={mode}
+            fuel={fuel}
+            inputs={inputs}
+            result={result}
+            staticData={staticData}
           />
         )}
       </div>
