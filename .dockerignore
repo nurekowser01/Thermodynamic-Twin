@@ -1,0 +1,20 @@
+# Frontend
+node_modules/
+frontend/dist/
+frontend/.env
+
+# Backend
+__pycache__/
+*.pyc
+.venv/
+backend/.env
+
+# Version control
+.git/
+.gitignore
+*.md
+!README.md
+
+# System files
+.DS_Store
+*.log

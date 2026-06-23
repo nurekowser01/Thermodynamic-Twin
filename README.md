@@ -75,6 +75,39 @@ Open **http://localhost:5173** in your browser.
 
 ---
 
+## Running with Docker
+
+```bash
+docker compose up --build
+```
+
+Open **http://localhost:8080** in your browser.
+
+- `docker compose up --build` — first run or rebuild images
+- `docker compose down` — stop containers
+- API docs — **http://localhost:8080/api/docs**
+- Local dev without Docker — use `run_dev.sh` / `run_dev.bat` above
+
+### Troubleshooting Docker
+
+**CoolProp build fails**: If you see compilation errors, try:
+```bash
+docker compose build --no-cache backend
+```
+
+**Healthcheck fails**: Verify backend is responding:
+```bash
+docker compose exec backend curl http://localhost:8749/health
+```
+
+**Port already in use**: Change host port mapping in `docker-compose.yml`:
+```yaml
+ports:
+  - "8081:80"
+```
+
+---
+
 ## Application Tabs
 
 | Tab | Description |
