@@ -29,7 +29,7 @@ services:
     mem_reservation: 1g                     # CHANGED: 2g → 1g
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
-      OLLAMA_MODEL: qwen2.5:0.5b
+      OLLAMA_MODEL: smollm:135m
       OLLAMA_REQUEST_TIMEOUT: "60"          # CHANGED: 90 → 60
       TEMPERATURE: "0.0"
       MAX_TOKENS: "128"                     # CHANGED: 512 → 256 (faster)
