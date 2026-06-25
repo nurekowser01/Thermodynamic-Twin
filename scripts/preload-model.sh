@@ -11,6 +11,8 @@ echo "Pulling model: $MODEL"
 docker compose exec ollama ollama pull "$MODEL"
 
 echo "Warming model in memory..."
-docker compose exec ollama ollama run "$MODEL" "ping" --verbose=false
+# OLLAMA_KEEP_ALIVE is set in docker-compose.yml - no flag needed!
+docker compose exec ollama ollama run "$MODEL" "ping"
 
-echo "Model $MODEL pulled and warmed."
+echo "✅ Model $MODEL pulled and warmed."
+echo "📊 Check memory: docker stats --no-stream"

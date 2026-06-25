@@ -52,11 +52,59 @@ function buildContext({ mode, fuel, inputs, result }) {
   }
 }
 
-function AnalysingIndicator() {
+const ANALYSIS_TIMEOUT_MS = 120_000
+
+function formatTime(ts) {
+  return new Date(ts).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+function AnalysingIndicator({ startTime, timeoutMs = ANALYSIS_TIMEOUT_MS }) {
+  const [pct, setPct] = useState(0)
+
+  useEffect(() => {
+    if (!startTime) return
+
+    const tick = () => {
+      const elapsed = Date.now() - startTime
+      setPct(Math.min(100, Math.round((elapsed / timeoutMs) * 100)))
+    }
+
+    tick()
+    const id = setInterval(tick, 150)
+    return () => clearInterval(id)
+  }, [startTime, timeoutMs])
+
+  const atLimit = pct >= 100
+
   return (
-    <div className="advisor-spinner" role="status" aria-live="polite">
-      <span className="advisor-spinner__icon" aria-hidden="true" />
-      <span>Analysing…</span>
+    <div
+      className="advisor-progress"
+      role="progressbar"
+      aria-live="polite"
+      aria-valuenow={pct}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label={`Analysing, ${pct} percent`}
+    >
+      <div className="advisor-progress__header">
+        <span className="advisor-progress__label">Analysing…</span>
+        <span className="advisor-progress__pct">{pct}%</span>
+      </div>
+      <div className="advisor-progress__track">
+        <div
+          className={`advisor-progress__fill${atLimit ? ' advisor-progress__fill--pulse' : ''}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {atLimit && (
+        <div className="advisor-progress__note">
+          Still working — large models may need more time.
+        </div>
+      )}
     </div>
   )
 }
@@ -65,6 +113,7 @@ export default function AssistantTab({ mode, fuel, inputs, result }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [analysisStart, setAnalysisStart] = useState(null)
   const [error, setError] = useState(null)
   const [healthLine, setHealthLine] = useState('Checking advisor…')
   const bottomRef = useRef(null)
@@ -95,10 +144,12 @@ export default function AssistantTab({ mode, fuel, inputs, result }) {
 
     setInput('')
     setError(null)
+    setAnalysisStart(Date.now())
     setLoading(true)
 
     const history = messages.map(m => ({ role: m.role, content: m.content }))
-    setMessages(prev => [...prev, { role: 'user', content: text }])
+    const sentAt = Date.now()
+    setMessages(prev => [...prev, { role: 'user', content: text, ts: sentAt }])
 
     try {
       const res = await sendMessage({
@@ -106,11 +157,12 @@ export default function AssistantTab({ mode, fuel, inputs, result }) {
         messages: history,
         context: buildContext({ mode, fuel, inputs, result }),
       })
-      setMessages(prev => [...prev, { role: 'assistant', content: res.reply }])
+      setMessages(prev => [...prev, { role: 'assistant', content: res.reply, ts: Date.now() }])
     } catch (e) {
       setError(e.message)
     } finally {
       setLoading(false)
+      setAnalysisStart(null)
     }
   }
 
@@ -122,65 +174,51 @@ export default function AssistantTab({ mode, fuel, inputs, result }) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 16, gap: 12 }}>
-      <div style={{ fontSize: 11, color: 'var(--text2)' }}>{healthLine}</div>
+    <div className="assistant-tab">
+      <div className="assistant-meta">{healthLine}</div>
       {!result && (
-        <div style={{ fontSize: 11, color: 'var(--orange)' }}>
+        <div className="assistant-hint">
           Run Calculate first for data-grounded answers.
         </div>
       )}
 
-      <div style={{
-        flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10,
-        padding: 12, background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 'var(--r)',
-      }}>
+      <div className="assistant-messages">
         {messages.length === 0 && (
-          <div style={{ color: 'var(--text2)', fontSize: 12 }}>
+          <div className="assistant-empty">
             Ask about efficiency, heat rate, filter maintenance, or operating conditions.
           </div>
         )}
         {messages.map((m, i) => (
-          <div key={i} style={{
-            alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-            maxWidth: '85%',
-            padding: '8px 12px',
-            borderRadius: 'var(--r)',
-            background: m.role === 'user' ? 'var(--accent2)' : 'var(--bg3)',
-            border: `1px solid ${m.role === 'user' ? 'var(--accent)' : 'var(--border)'}`,
-            fontSize: 12,
-            lineHeight: 1.5,
-            whiteSpace: 'pre-wrap',
-          }}>
-            {m.content}
+          <div
+            key={m.ts ?? i}
+            className={`assistant-bubble assistant-bubble--${m.role}`}
+          >
+            <div className="assistant-bubble__time">{formatTime(m.ts)}</div>
+            <div className="assistant-bubble__text">{m.content}</div>
           </div>
         ))}
-        {loading && <AnalysingIndicator />}
+        {loading && analysisStart && (
+          <AnalysingIndicator startTime={analysisStart} />
+        )}
         <div ref={bottomRef} />
       </div>
 
-      {error && (
-        <div style={{ fontSize: 11, color: 'var(--red)' }}>{error}</div>
-      )}
+      {error && <div className="assistant-error">{error}</div>}
 
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div className="assistant-input-row">
         <textarea
+          className="assistant-input"
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Ask the advisor…"
           rows={2}
           disabled={loading}
-          style={{
-            flex: 1, resize: 'none', padding: '8px 10px',
-            background: 'var(--input-bg)', border: '1px solid var(--input-border)',
-            borderRadius: 'var(--r)', color: 'var(--text0)', fontFamily: 'var(--font)', fontSize: 12,
-          }}
         />
         <button
-          className={`calc-btn${loading ? ' loading' : ''}`}
+          className={`calc-btn assistant-send${loading ? ' loading' : ''}`}
           onClick={handleSend}
           disabled={loading || !input.trim()}
-          style={{ alignSelf: 'flex-end', minWidth: 88 }}
         >
           {loading ? 'Analysing…' : 'Send'}
         </button>
