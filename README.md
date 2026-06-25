@@ -31,6 +31,9 @@ sirajganj_app/
 │           ├── FilterTab.jsx       ← ΔP degradation curves + live hour inputs
 │           └── AssistantTab.jsx    ← LLM advisor chat (Docker only)
 ├── llm-service/    ← Independent LLM advisor API (port 11435)
+├── scripts/
+│   ├── preload-model.sh   ← Pull and warm Ollama model (Docker)
+│   └── preload-model.bat
 ├── run_dev.sh      ← Linux/macOS launcher
 ├── run_dev.bat     ← Windows launcher
 └── README.md
@@ -80,18 +83,24 @@ Open **http://localhost:5173** in your browser.
 ## Running with Docker
 
 ```bash
-docker compose up --build
+docker compose up -d --build
 ```
 
-Pull the Ollama model (first time only, ~2 GB for llama3.2:3b):
+Pull and warm the Ollama model (first time only, ~400 MB for `qwen2.5:0.5b`):
 
 ```bash
-docker compose exec ollama ollama pull llama3.2:3b
+bash scripts/preload-model.sh
+```
+
+On Windows:
+
+```bat
+scripts\preload-model.bat
 ```
 
 Open **http://localhost:8080** in your browser.
 
-- `docker compose up --build` — first run or rebuild images
+- `docker compose up -d --build` — first run or rebuild images
 - `docker compose down` — stop containers
 - Solver API docs — **http://localhost:8080/api/docs**
 - Advisor API docs — **http://localhost:8080/api/llm/docs**
@@ -155,22 +164,77 @@ Edit `environment:` under `llm-advisor` in [`docker-compose.yml`](docker-compose
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `OLLAMA_MODEL` | `llama3.2:3b` | Model tag |
-| `TEMPERATURE` | `0.3` | Response creativity |
-| `OLLAMA_REQUEST_TIMEOUT` | `120` | Seconds |
-| `OLLAMA_MEMORY_LIMIT` | `8g` | Ollama container memory |
-| `LLM_MEMORY_LIMIT` | `4g` | Advisor container memory |
+| `OLLAMA_MODEL` | `qwen2.5:0.5b` | Model tag |
+| `TEMPERATURE` | `0.0` | Response creativity (0 = deterministic) |
+| `MAX_TOKENS` | `256` | Max output tokens (`num_predict`) |
+| `NUM_CTX` | `2048` | Context window per request |
+| `OLLAMA_REQUEST_TIMEOUT` | `30` | Seconds |
+| Ollama `mem_limit` | `1.2g` | Ollama container memory |
+| LLM `mem_limit` | `512m` | Advisor container memory |
+
+### Speed optimization (local dev)
+
+The default Docker stack is tuned for **low RAM** and **fast responses** on limited hardware. Accuracy is secondary.
+
+**Model comparison**
+
+| Model | Pull size | RAM (approx) | Speed | Quality |
+|-------|-----------|--------------|-------|---------|
+| **qwen2.5:0.5b** (default) | ~400 MB | ~350–500 MB | Very fast | Basic |
+| qwen2.5:1.5b | ~1 GB | ~1 GB | Fast | Better if 0.5b is too weak |
+| tinyllama | ~637 MB | ~500 MB | Very fast | Basic fallback |
+| llama3.2:1b | ~1.3 GB | ~1.2 GB | Fast | Higher RAM |
+| phi3:mini | ~2 GB | ~2 GB | Medium | Avoid — breaks RAM budget |
+
+**Memory budget (container caps)**
+
+| Service | mem_limit |
+|---------|-----------|
+| ollama | 1.2g |
+| llm-advisor | 512m |
+| backend | 768m |
+| frontend | 128m |
+
+Expect **~2.2–2.8 GB host RAM** total including Docker overhead.
+
+**Quick start**
+
+```bash
+docker compose up -d --build
+bash scripts/preload-model.sh
+curl http://localhost:8080/api/llm/health
+```
+
+**Verification**
+
+```bash
+docker stats --no-stream
+time curl -s -X POST http://localhost:8080/api/llm/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"What affects heat rate?"}'
+```
+
+First chat after cold start may take 3–5 s (model load). Subsequent chats should be under ~2 s on modest CPU hardware.
+
+**Fallback models**
+
+- Quality too poor → set `OLLAMA_MODEL: qwen2.5:1.5b` and raise ollama `mem_limit` to `1.5g`
+- Still need more → `llama3.2:1b` with ollama `mem_limit: 1.5g`
+- Extreme speed → `tinyllama`
+
+**Settings that do not work** (do not use): `OLLAMA_LOAD_IN_4BIT` (not an Ollama env var — models are already quantized), `OLLAMA_NUM_GPU=0` (CPU is default without GPU devices).
 
 ### Troubleshooting LLM Advisor
 
 **Advisor degraded / model not ready**:
+
 ```bash
-docker compose exec ollama ollama pull llama3.2:3b
+bash scripts/preload-model.sh
 ```
 
 **Chat returns 503**: Check Ollama is running: `docker compose ps`
 
-**Out of memory**: Use a smaller model (e.g. `llama3.2:1b`) or increase `mem_limit` in compose.
+**Out of memory**: Step up to `qwen2.5:1.5b` or increase `mem_limit` in compose; avoid `phi3:mini` on low-RAM hosts.
 
 **GPU (optional)**: Add NVIDIA device reservation to the `ollama` service in `docker-compose.yml` (see `.env.example` comment).
 

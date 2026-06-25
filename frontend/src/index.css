@@ -206,6 +206,25 @@ body {
 .calc-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .calc-btn.loading { opacity: 0.7; }
 
+.advisor-spinner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text2);
+}
+.advisor-spinner__icon {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: advisor-spin 0.8s linear infinite;
+}
+@keyframes advisor-spin {
+  to { transform: rotate(360deg); }
+}
+
 .canvas-area {
   flex: 1;
   overflow: auto;

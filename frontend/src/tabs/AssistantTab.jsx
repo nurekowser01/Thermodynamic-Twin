@@ -2,7 +2,41 @@
 import { useState, useEffect, useRef } from 'react'
 import { checkAdvisorHealth, sendMessage } from '../hooks/useAdvisorApi'
 
-function buildContext({ mode, fuel, inputs, result, staticData }) {
+const GT_KEYS = [
+  'P_GT_actual_MW', 'P_GT_expected_MW', 'P_GTM_design_MW',
+  'HR_LHV_kJ_kWh', 'HR_HHV_kJ_kWh', 'eta_LHV_pct', 'eta_HHV_pct',
+  'delta_P_MW', 'delta_P_pct', 'm_fuel_actual', 'm_exh_estimated_kgs',
+  'T5_TII_oem_C', 'T4_TIT_C', 'P_eff_hPa', 'P_compressor_MW',
+]
+
+function pick(obj, keys) {
+  if (!obj) return null
+  const out = {}
+  for (const k of keys) {
+    if (obj[k] != null) out[k] = obj[k]
+  }
+  return Object.keys(out).length ? out : null
+}
+
+function slimResult(result) {
+  if (!result) return null
+  const gt = result.gt || {}
+  const balance = result.balance || {}
+  const slimGt = pick(gt, GT_KEYS) || {}
+  const comp = pick(gt.compressor, ['T1_C', 'T3_C', 'P3_hPa', 'eta_c_pct'])
+  if (comp) slimGt.compressor = comp
+  const net = pick(balance.net_output, ['P_net_MW', 'P_GT_MW', 'P_aux_total_MW'])
+  const hb = pick(balance.heat_balance, ['Q_fuel_MW', 'Q_exhaust_MW', 'eta_th_pct'])
+  const slimBalance = {}
+  if (net) slimBalance.net_output = net
+  if (hb) slimBalance.heat_balance = hb
+  const out = {}
+  if (Object.keys(slimGt).length) out.gt = slimGt
+  if (Object.keys(slimBalance).length) out.balance = slimBalance
+  return Object.keys(out).length ? out : null
+}
+
+function buildContext({ mode, fuel, inputs, result }) {
   const parsedInputs = {}
   if (inputs) {
     for (const [k, v] of Object.entries(inputs)) {
@@ -14,12 +48,20 @@ function buildContext({ mode, fuel, inputs, result, staticData }) {
     mode,
     fuel,
     inputs: parsedInputs,
-    result: result ? { gt: result.gt, balance: result.balance, thermo: result.thermo } : null,
-    static_data: staticData ? { design_point: staticData.design_point } : null,
+    result: slimResult(result),
   }
 }
 
-export default function AssistantTab({ mode, fuel, inputs, result, staticData }) {
+function AnalysingIndicator() {
+  return (
+    <div className="advisor-spinner" role="status" aria-live="polite">
+      <span className="advisor-spinner__icon" aria-hidden="true" />
+      <span>Analysing…</span>
+    </div>
+  )
+}
+
+export default function AssistantTab({ mode, fuel, inputs, result }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -62,7 +104,7 @@ export default function AssistantTab({ mode, fuel, inputs, result, staticData })
       const res = await sendMessage({
         message: text,
         messages: history,
-        context: buildContext({ mode, fuel, inputs, result, staticData }),
+        context: buildContext({ mode, fuel, inputs, result }),
       })
       setMessages(prev => [...prev, { role: 'assistant', content: res.reply }])
     } catch (e) {
@@ -112,9 +154,7 @@ export default function AssistantTab({ mode, fuel, inputs, result, staticData })
             {m.content}
           </div>
         ))}
-        {loading && (
-          <div style={{ fontSize: 11, color: 'var(--text2)' }}>Sending…</div>
-        )}
+        {loading && <AnalysingIndicator />}
         <div ref={bottomRef} />
       </div>
 
@@ -137,12 +177,12 @@ export default function AssistantTab({ mode, fuel, inputs, result, staticData })
           }}
         />
         <button
-          className="calc-btn"
+          className={`calc-btn${loading ? ' loading' : ''}`}
           onClick={handleSend}
           disabled={loading || !input.trim()}
-          style={{ alignSelf: 'flex-end', minWidth: 72 }}
+          style={{ alignSelf: 'flex-end', minWidth: 88 }}
         >
-          {loading ? 'Sending…' : 'Send'}
+          {loading ? 'Analysing…' : 'Send'}
         </button>
       </div>
     </div>

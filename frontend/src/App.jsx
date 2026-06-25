@@ -197,7 +197,6 @@ export default function App() {
             fuel={fuel}
             inputs={inputs}
             result={result}
-            staticData={staticData}
           />
         )}
       </div>
