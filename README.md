@@ -96,13 +96,16 @@ bash scripts/select-model.sh
 
 The model selector script **only** manages Ollama + the advisor — it does **not** rebuild backend/frontend:
 
-1. Starts Ollama (`docker compose up -d ollama`)
-2. Pulls the chosen model (skips if already local)
+1. Starts Ollama (`docker compose up -d ollama`) if it is not running
+2. Pulls the chosen model (skips if already on disk)
 3. Updates `OLLAMA_MODEL` in `docker-compose.yml`
-4. Restarts `llm-advisor` with the new model
-5. Warms the model and prints health status
+4. **Recreates** `llm-advisor` so it picks up the new model env (`docker compose up -d --force-recreate llm-advisor`)
+5. **Warms** the model in Ollama memory (`ollama run <model> ping`)
+6. Prints advisor health from `http://localhost:8080/api/llm/health`
 
 Run step 1 first. Use `select-model` when you want to pick or change models.
+
+**You do not need** `docker compose build` for a model change — only Ollama pull + `llm-advisor` restart (handled by the script).
 
 ### Verify everything is up
 
@@ -171,9 +174,34 @@ All scripts live in [`scripts/`](scripts/). Run from the **project root**.
 
 | Script | Purpose |
 |--------|---------|
-| `select-model.sh` / `.bat` | Interactive menu — pick model, pull, update compose, restart advisor |
-| `switch-model.sh` / `.bat` | Quick switch: `bash scripts/switch-model.sh <model>` |
-| `preload-model.sh` / `.bat` | Pull + warm the model **already set** in `docker-compose.yml` (no model change) |
+| `select-model.sh` / `.bat` | Interactive menu — pick model, pull, update compose, restart advisor, warm |
+| `switch-model.sh` / `.bat` | Quick switch: `bash scripts/switch-model.sh <model>` (same steps as select, no menu) |
+| `preload-model.sh` / `.bat` | Pull + warm the model in `docker-compose.yml` (no model change, no advisor restart) |
+
+Shared logic is in [`scripts/model-switch.sh`](scripts/model-switch.sh) (`apply_model`, `warm_model`, `restart_advisor`, etc.).
+
+### Which Docker services are touched
+
+| Action | `ollama` | `llm-advisor` | `backend` | `frontend` | `docker compose build`? |
+|--------|----------|---------------|-----------|------------|-------------------------|
+| First-time `docker compose up -d --build` | start | start | start | start | yes (all images) |
+| `select-model` / `switch-model` | ensure running, pull | **recreate** | — | — | **no** |
+| `preload-model` | ensure running, pull, warm | — | — | — | **no** |
+| Edit `llm-service/` code | — | **rebuild + up** | — | — | `llm-advisor` only |
+| Edit `backend/` or `frontend/` code | — | — | rebuild | rebuild | that service only |
+
+After a model switch, **only `llm-advisor` is recreated**. Backend and frontend keep running.
+
+Manual equivalent of a model switch:
+
+```bash
+docker compose up -d ollama
+docker compose exec -T ollama ollama pull qwen2.5:0.5b
+# edit OLLAMA_MODEL in docker-compose.yml, then:
+docker compose up -d --force-recreate llm-advisor
+docker compose exec -T ollama ollama run qwen2.5:0.5b "ping"
+curl http://localhost:8080/api/llm/health
+```
 
 ### Interactive model picker
 
@@ -199,42 +227,104 @@ scripts\select-model.bat
 scripts\switch-model.bat qwen2.5:0.5b
 ```
 
-### Pull current compose model only
+### Initial model load and warming
 
-Use when `OLLAMA_MODEL` is already correct in `docker-compose.yml` and you just need to download/warm it:
+**Pull** downloads model weights into the Ollama volume (`ollama_data`). **Warm** loads weights into RAM so the first chat is not painfully slow.
+
+| Step | What happens | Who does it |
+|------|----------------|-------------|
+| Pull | `ollama pull <model>` — saves to disk | `select-model`, `switch-model`, or `preload-model` |
+| Advisor restart | `llm-advisor` reads new `OLLAMA_MODEL` from compose | `select-model` / `switch-model` only |
+| Warm | `ollama run <model> "ping"` — loads model into memory | all three scripts |
+
+**First install** — pick a model after the stack is up:
+
+```bash
+docker compose up -d --build
+bash scripts/select-model.sh          # interactive
+# or
+bash scripts/switch-model.sh smollm:135m   # non-interactive default
+```
+
+**Stack already running, model already set in compose** — pull + warm only (no advisor restart):
 
 ```bash
 bash scripts/preload-model.sh
 ```
 
+Reads `OLLAMA_MODEL` from [`docker-compose.yml`](docker-compose.yml). Override with:
+
+```bash
+OLLAMA_MODEL=qwen2.5:1.5b bash scripts/preload-model.sh
+```
+
+**After `docker compose down` / host reboot** — Ollama may still have the model on disk, but RAM is cold. Warm again before demos:
+
+```bash
+docker compose up -d
+bash scripts/preload-model.sh
+```
+
+Warming on CPU can take **30 s–several minutes** for larger models (`qwen2.5:1.5b`, `llama3.2:3b`). The script prints `Warming model in memory...` and waits until `ollama run` finishes. `select-model` hides warm output; `preload-model` shows it.
+
+Ollama keeps loaded models in memory for **`OLLAMA_KEEP_ALIVE`** (default `30m` in compose). Chats within that window reuse the loaded model.
+
+Verify warm + healthy:
+
+```bash
+curl http://localhost:8080/api/llm/health
+# expect: "status": "healthy", "model_ready": true
+
+time curl -s -X POST http://localhost:8080/api/llm/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"ping"}'
+```
+
 ### Typical workflows
 
-**New install — I want the default fast model:**
+**New install — default fast model:**
 
 ```bash
 docker compose up -d --build
 bash scripts/switch-model.sh smollm:135m
 ```
 
-**New install — I want to choose from the menu:**
+**New install — choose from menu:**
 
 ```bash
 docker compose up -d --build
 bash scripts/select-model.sh
 ```
 
-**Change model later (app already running):**
+**Change model while app is running** (solver + UI stay up):
 
 ```bash
+bash scripts/switch-model.sh qwen2.5:1.5b
+# or
 bash scripts/select-model.sh
-# backend and frontend keep running; only ollama + llm-advisor are touched
 ```
 
-**After git pull / code changes:**
+If the new model needs more RAM, edit `mem_limit` under `ollama` in `docker-compose.yml` **before** switching, then run the switch script (no full rebuild).
+
+**After git pull** (code/images may have changed):
 
 ```bash
 docker compose up -d --build
-bash scripts/preload-model.sh    # re-warm model if advisor was recreated
+bash scripts/preload-model.sh    # re-pull + warm if advisor/ollama was recreated
+```
+
+**You changed only `OLLAMA_MODEL` by hand in compose** (no script):
+
+```bash
+docker compose up -d --force-recreate llm-advisor
+bash scripts/preload-model.sh
+```
+
+**You changed `llm-service/` code**:
+
+```bash
+docker compose build llm-advisor && docker compose up -d llm-advisor
+bash scripts/preload-model.sh
 ```
 
 ### Troubleshooting Docker
@@ -255,7 +345,11 @@ ports:
   - "8081:80"
 ```
 
-**Advisor health `degraded`**: Model not pulled — run `bash scripts/select-model.sh` or `bash scripts/preload-model.sh`.
+**Advisor health `degraded`**: Model not pulled or not warm — run `bash scripts/select-model.sh` or `bash scripts/preload-model.sh`.
+
+**Stuck on "Warming model in memory..."**: Normal on CPU for larger models; wait or try a smaller model (`smollm:135m`, `qwen2.5:0.5b`). Use `preload-model.sh` to see warm progress (not hidden).
+
+**Switched model but advisor still uses old one**: Run `bash scripts/switch-model.sh <model>` (updates compose + recreates `llm-advisor`). Editing compose alone is not enough until advisor is recreated.
 
 ---
 
@@ -326,15 +420,16 @@ Larger models (`llama3.2:3b`, `qwen2.5:1.5b`) may require raising ollama `mem_li
 
 Edit `environment:` under `llm-advisor` in [`docker-compose.yml`](docker-compose.yml). See [`.env.example`](.env.example) for reference.
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `OLLAMA_MODEL` | `smollm:135m` | Model tag |
+| Variable | Default (compose) | Purpose |
+|----------|-------------------|---------|
+| `OLLAMA_MODEL` | `qwen2.5:0.5b` | Model tag |
 | `TEMPERATURE` | `0.0` | Response creativity (0 = deterministic) |
-| `MAX_TOKENS` | `256` | Max output tokens (`num_predict`) |
-| `NUM_CTX` | `2048` | Context window per request |
-| `OLLAMA_REQUEST_TIMEOUT` | `30` | Seconds |
-| Ollama `mem_limit` | `800m` | Ollama container memory |
-| LLM `mem_limit` | `512m` | Advisor container memory |
+| `MAX_TOKENS` | `128` | Max output tokens (`num_predict`) |
+| `NUM_CTX` | `1024` | Context window per request |
+| `OLLAMA_REQUEST_TIMEOUT` | `60` | Seconds |
+| `OLLAMA_KEEP_ALIVE` (ollama) | `30m` | How long loaded model stays in RAM |
+| Ollama `mem_limit` | `4g` | Ollama container memory |
+| LLM `mem_limit` | `2g` | Advisor container memory |
 
 ### Speed optimization (local dev)
 
@@ -351,16 +446,16 @@ The default Docker stack is tuned for **low RAM** and **fast responses** on limi
 | llama3.2:1b | ~1.3 GB | ~1.2 GB | Fast | Higher RAM |
 | phi3:mini | ~2 GB | ~2 GB | Medium | Avoid — breaks RAM budget |
 
-**Memory budget (container caps)**
+**Memory budget (container caps — see [`docker-compose.yml`](docker-compose.yml))**
 
-| Service | mem_limit |
-|---------|-----------|
-| ollama | 800m |
-| llm-advisor | 512m |
+| Service | mem_limit (current) |
+|---------|---------------------|
+| ollama | 4g |
+| llm-advisor | 2g |
 | backend | 768m |
 | frontend | 128m |
 
-Expect **~2.0–2.5 GB host RAM** total including Docker overhead with `smollm:135m`.
+Tune down for low-RAM hosts (e.g. ollama `800m`–`1.5g`) and use `smollm:135m` or `qwen2.5:0.5b`.
 
 **Verification**
 
@@ -386,10 +481,12 @@ First chat after cold start may take 3–5 s (model load). Subsequent chats shou
 **Advisor degraded / model not ready**:
 
 ```bash
-bash scripts/select-model.sh
-# or, if model is already set in compose:
-bash scripts/preload-model.sh
+bash scripts/select-model.sh       # pull + restart advisor + warm
+# or, if OLLAMA_MODEL in compose is already correct:
+bash scripts/preload-model.sh      # pull + warm only
 ```
+
+**Wrong model after switch**: Recreate advisor — `docker compose up -d --force-recreate llm-advisor` or re-run `switch-model.sh`.
 
 **Chat returns 503**: Check Ollama is running: `docker compose ps`
 
