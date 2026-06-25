@@ -5,18 +5,28 @@ services:
       - ollama_data:/root/.ollama
     expose:
       - "11434"
-    mem_limit: 8g
+    mem_limit: 2g    # ⬅️ Reduced from 8g to 2g
+    mem_reservation: 1.5g  # ⬅️ Guarantee minimum
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
 
   llm-advisor:
     build: ./llm-service
     expose:
       - "11435"
-    mem_limit: 4g
+    mem_limit: 1g    # ⬅️ Reduced from 4g to 1g
+    mem_reservation: 512m
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
-      OLLAMA_MODEL: llama3.2:3b
+      OLLAMA_MODEL: llama3.2:1b   # ⬅️ Changed to smaller model
       OLLAMA_REQUEST_TIMEOUT: "120"
       TEMPERATURE: "0.3"
+      MAX_TOKENS: "1024"  # ⬅️ Reduced for less memory
       CORS_ORIGINS: http://localhost:8080
       LOG_LEVEL: INFO
     depends_on:
@@ -26,26 +36,32 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   backend:
     build: ./backend
     expose:
       - "8749"
-    mem_limit: 2g
+    mem_limit: 1g    # ⬅️ Reduced from 2g
+    mem_reservation: 512m
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8749/health"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   frontend:
     build: ./frontend
     ports:
       - "8080:80"
-    mem_limit: 512m
+    mem_limit: 256m   # ⬅️ Reduced from 512m
+    mem_reservation: 128m
     depends_on:
       backend:
         condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   ollama_data:
+    driver: local
