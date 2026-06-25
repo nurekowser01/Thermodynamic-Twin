@@ -1,7 +1,7 @@
 import os
 
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:0.5b")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "smollm:135m")
 OLLAMA_REQUEST_TIMEOUT = int(os.environ.get("OLLAMA_REQUEST_TIMEOUT", "90"))
 TEMPERATURE = float(os.environ.get("TEMPERATURE", "0.0"))
 MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "256"))

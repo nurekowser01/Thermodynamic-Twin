@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0.."
 
-if not defined OLLAMA_MODEL set OLLAMA_MODEL=qwen2.5:0.5b
+if not defined OLLAMA_MODEL set OLLAMA_MODEL=smollm:135m
 
 echo Starting Ollama...
 docker compose up -d ollama

@@ -86,7 +86,7 @@ Open **http://localhost:5173** in your browser.
 docker compose up -d --build
 ```
 
-Pull and warm the Ollama model (first time only, ~400 MB for `qwen2.5:0.5b`):
+Pull and warm the Ollama model (first time only, ~91 MB for `smollm:135m`):
 
 ```bash
 bash scripts/preload-model.sh
@@ -164,12 +164,12 @@ Edit `environment:` under `llm-advisor` in [`docker-compose.yml`](docker-compose
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `OLLAMA_MODEL` | `qwen2.5:0.5b` | Model tag |
+| `OLLAMA_MODEL` | `smollm:135m` | Model tag |
 | `TEMPERATURE` | `0.0` | Response creativity (0 = deterministic) |
 | `MAX_TOKENS` | `256` | Max output tokens (`num_predict`) |
 | `NUM_CTX` | `2048` | Context window per request |
 | `OLLAMA_REQUEST_TIMEOUT` | `30` | Seconds |
-| Ollama `mem_limit` | `1.2g` | Ollama container memory |
+| Ollama `mem_limit` | `800m` | Ollama container memory |
 | LLM `mem_limit` | `512m` | Advisor container memory |
 
 ### Speed optimization (local dev)
@@ -180,7 +180,8 @@ The default Docker stack is tuned for **low RAM** and **fast responses** on limi
 
 | Model | Pull size | RAM (approx) | Speed | Quality |
 |-------|-----------|--------------|-------|---------|
-| **qwen2.5:0.5b** (default) | ~400 MB | ~350–500 MB | Very fast | Basic |
+| **smollm:135m** (default) | ~91 MB | ~150–250 MB | Fastest | Minimal — generic answers |
+| qwen2.5:0.5b | ~400 MB | ~350–500 MB | Very fast | Better instruction-following |
 | qwen2.5:1.5b | ~1 GB | ~1 GB | Fast | Better if 0.5b is too weak |
 | tinyllama | ~637 MB | ~500 MB | Very fast | Basic fallback |
 | llama3.2:1b | ~1.3 GB | ~1.2 GB | Fast | Higher RAM |
@@ -190,12 +191,12 @@ The default Docker stack is tuned for **low RAM** and **fast responses** on limi
 
 | Service | mem_limit |
 |---------|-----------|
-| ollama | 1.2g |
+| ollama | 800m |
 | llm-advisor | 512m |
 | backend | 768m |
 | frontend | 128m |
 
-Expect **~2.2–2.8 GB host RAM** total including Docker overhead.
+Expect **~2.0–2.5 GB host RAM** total including Docker overhead with `smollm:135m`.
 
 **Quick start**
 
@@ -218,9 +219,9 @@ First chat after cold start may take 3–5 s (model load). Subsequent chats shou
 
 **Fallback models**
 
-- Quality too poor → set `OLLAMA_MODEL: qwen2.5:1.5b` and raise ollama `mem_limit` to `1.5g`
+- Quality too poor → set `OLLAMA_MODEL: qwen2.5:0.5b` and raise ollama `mem_limit` to `1.2g`
+- Need better answers → `qwen2.5:1.5b` with ollama `mem_limit: 1.5g`
 - Still need more → `llama3.2:1b` with ollama `mem_limit: 1.5g`
-- Extreme speed → `tinyllama`
 
 **Settings that do not work** (do not use): `OLLAMA_LOAD_IN_4BIT` (not an Ollama env var — models are already quantized), `OLLAMA_NUM_GPU=0` (CPU is default without GPU devices).
 

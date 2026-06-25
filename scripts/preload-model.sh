@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-MODEL="${OLLAMA_MODEL:-qwen2.5:0.5b}"
+MODEL="${OLLAMA_MODEL:-smollm:135m}"
 
 cd "$ROOT"
 echo "Starting Ollama..."
