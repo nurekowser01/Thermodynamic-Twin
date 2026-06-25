@@ -33,7 +33,11 @@ sirajganj_app/
 ├── llm-service/    ← Independent LLM advisor API (port 11435)
 ├── scripts/
 │   ├── preload-model.sh   ← Pull and warm Ollama model (Docker)
-│   └── preload-model.bat
+│   ├── preload-model.bat
+│   ├── select-model.sh    ← Interactive model picker + compose update
+│   ├── select-model.bat
+│   ├── switch-model.sh    ← Quick model switch (CLI arg)
+│   └── switch-model.bat
 ├── run_dev.sh      ← Linux/macOS launcher
 ├── run_dev.bat     ← Windows launcher
 └── README.md
@@ -43,19 +47,221 @@ sirajganj_app/
 
 ## Prerequisites
 
-**Python** (3.10+)
+**Docker (recommended — full app + LLM Advisor)**
+
+- Docker Engine + Docker Compose v2
+- ~2–2.5 GB free RAM for default stack (`smollm:135m`)
+
+**Local development only (no Assistant tab)**
+
+| Tool | Version |
+|------|---------|
+| Python | 3.10+ |
+| Node.js | 18+ |
+
 ```bash
 pip install fastapi uvicorn pydantic CoolProp scipy numpy
-```
-
-**Node.js** (18+)
-```bash
 cd frontend && npm install
 ```
 
 ---
 
-## Running (Development)
+## Quick start (Docker — full stack)
+
+From the project root:
+
+```bash
+# 1. Build images and start all services (backend, frontend, llm-advisor, ollama)
+docker compose up -d --build
+
+# 2. Choose and pull an Ollama model (interactive menu)
+bash scripts/select-model.sh
+
+# 3. Open the app
+# http://localhost:8080
+```
+
+**Windows** — use `scripts\select-model.bat` in step 2.
+
+### What step 1 starts
+
+| Service | Host URL | Role |
+|---------|----------|------|
+| frontend | http://localhost:8080 | React UI + nginx proxy |
+| backend | via `/api/*` | Thermodynamic solver |
+| llm-advisor | via `/api/llm/*` | Chat API |
+| ollama | internal only | Local LLM inference |
+
+### What step 2 does (`select-model.sh`)
+
+The model selector script **only** manages Ollama + the advisor — it does **not** rebuild backend/frontend:
+
+1. Starts Ollama (`docker compose up -d ollama`)
+2. Pulls the chosen model (skips if already local)
+3. Updates `OLLAMA_MODEL` in `docker-compose.yml`
+4. Restarts `llm-advisor` with the new model
+5. Warms the model and prints health status
+
+Run step 1 first. Use `select-model` when you want to pick or change models.
+
+### Verify everything is up
+
+```bash
+# Solver
+curl http://localhost:8080/api/health
+
+# LLM advisor (healthy = model loaded)
+curl http://localhost:8080/api/llm/health
+
+# All containers
+docker compose ps
+```
+
+---
+
+## Running with Docker
+
+### First-time setup
+
+```bash
+docker compose up -d --build
+bash scripts/select-model.sh          # pick model from menu
+# or: bash scripts/switch-model.sh smollm:135m   # skip menu, use default
+```
+
+### Everyday use (already built)
+
+```bash
+docker compose up -d
+```
+
+Only needed if you changed code or `docker-compose.yml` images:
+
+```bash
+docker compose up -d --build
+```
+
+### Stop
+
+```bash
+docker compose down
+```
+
+### Rebuild a single service
+
+```bash
+docker compose build backend && docker compose up -d backend
+docker compose build frontend && docker compose up -d frontend
+docker compose build llm-advisor && docker compose up -d llm-advisor
+```
+
+### Useful URLs
+
+| URL | Description |
+|-----|-------------|
+| http://localhost:8080 | Main app |
+| http://localhost:8080/api/docs | Solver API (Swagger) |
+| http://localhost:8080/api/llm/docs | Advisor API (Swagger) |
+
+---
+
+## Ollama model scripts
+
+All scripts live in [`scripts/`](scripts/). Run from the **project root**.
+
+| Script | Purpose |
+|--------|---------|
+| `select-model.sh` / `.bat` | Interactive menu — pick model, pull, update compose, restart advisor |
+| `switch-model.sh` / `.bat` | Quick switch: `bash scripts/switch-model.sh <model>` |
+| `preload-model.sh` / `.bat` | Pull + warm the model **already set** in `docker-compose.yml` (no model change) |
+
+### Interactive model picker
+
+```bash
+bash scripts/select-model.sh
+# or
+./scripts/select-model.sh
+```
+
+Menu options: `smollm:135m` (default), `smollm:360m`, `tinyllama`, `qwen2.5:0.5b`, `qwen2.5:1.5b`, `llama3.2:1b`, `llama3.2:3b`, or custom.
+
+### Quick switch (no menu)
+
+```bash
+bash scripts/switch-model.sh qwen2.5:0.5b
+bash scripts/switch-model.sh tinyllama
+```
+
+Windows:
+
+```bat
+scripts\select-model.bat
+scripts\switch-model.bat qwen2.5:0.5b
+```
+
+### Pull current compose model only
+
+Use when `OLLAMA_MODEL` is already correct in `docker-compose.yml` and you just need to download/warm it:
+
+```bash
+bash scripts/preload-model.sh
+```
+
+### Typical workflows
+
+**New install — I want the default fast model:**
+
+```bash
+docker compose up -d --build
+bash scripts/switch-model.sh smollm:135m
+```
+
+**New install — I want to choose from the menu:**
+
+```bash
+docker compose up -d --build
+bash scripts/select-model.sh
+```
+
+**Change model later (app already running):**
+
+```bash
+bash scripts/select-model.sh
+# backend and frontend keep running; only ollama + llm-advisor are touched
+```
+
+**After git pull / code changes:**
+
+```bash
+docker compose up -d --build
+bash scripts/preload-model.sh    # re-warm model if advisor was recreated
+```
+
+### Troubleshooting Docker
+
+**CoolProp build fails**: If you see compilation errors, try:
+```bash
+docker compose build --no-cache backend
+```
+
+**Healthcheck fails**: Verify backend is responding:
+```bash
+docker compose exec backend curl http://localhost:8749/health
+```
+
+**Port already in use**: Change host port mapping in `docker-compose.yml`:
+```yaml
+ports:
+  - "8081:80"
+```
+
+**Advisor health `degraded`**: Model not pulled — run `bash scripts/select-model.sh` or `bash scripts/preload-model.sh`.
+
+---
+
+## Running (Development — no Docker)
+
+Solver + UI only. The **Assistant** tab does not work in this mode (requires Docker + Ollama).
 
 ### Linux / macOS
 ```bash
@@ -77,52 +283,6 @@ npm run dev
 ```
 
 Open **http://localhost:5173** in your browser.
-
----
-
-## Running with Docker
-
-```bash
-docker compose up -d --build
-```
-
-Pull and warm the Ollama model (first time only, ~91 MB for `smollm:135m`):
-
-```bash
-bash scripts/preload-model.sh
-```
-
-On Windows:
-
-```bat
-scripts\preload-model.bat
-```
-
-Open **http://localhost:8080** in your browser.
-
-- `docker compose up -d --build` — first run or rebuild images
-- `docker compose down` — stop containers
-- Solver API docs — **http://localhost:8080/api/docs**
-- Advisor API docs — **http://localhost:8080/api/llm/docs**
-- Local dev without Docker — use `run_dev.sh` / `run_dev.bat` (Assistant tab requires Docker)
-
-### Troubleshooting Docker
-
-**CoolProp build fails**: If you see compilation errors, try:
-```bash
-docker compose build --no-cache backend
-```
-
-**Healthcheck fails**: Verify backend is responding:
-```bash
-docker compose exec backend curl http://localhost:8749/health
-```
-
-**Port already in use**: Change host port mapping in `docker-compose.yml`:
-```yaml
-ports:
-  - "8081:80"
-```
 
 ---
 
@@ -157,6 +317,10 @@ curl -X POST http://localhost:8080/api/llm/chat \
 ```
 
 Send plant context from the **Assistant** tab (inputs + solver results after Calculate).
+
+Model selection is documented in [Ollama model scripts](#ollama-model-scripts) above.
+
+Larger models (`llama3.2:3b`, `qwen2.5:1.5b`) may require raising ollama `mem_limit` in [`docker-compose.yml`](docker-compose.yml).
 
 ### Configuration
 
@@ -198,14 +362,6 @@ The default Docker stack is tuned for **low RAM** and **fast responses** on limi
 
 Expect **~2.0–2.5 GB host RAM** total including Docker overhead with `smollm:135m`.
 
-**Quick start**
-
-```bash
-docker compose up -d --build
-bash scripts/preload-model.sh
-curl http://localhost:8080/api/llm/health
-```
-
 **Verification**
 
 ```bash
@@ -219,9 +375,9 @@ First chat after cold start may take 3–5 s (model load). Subsequent chats shou
 
 **Fallback models**
 
-- Quality too poor → set `OLLAMA_MODEL: qwen2.5:0.5b` and raise ollama `mem_limit` to `1.2g`
-- Need better answers → `qwen2.5:1.5b` with ollama `mem_limit: 1.5g`
-- Still need more → `llama3.2:1b` with ollama `mem_limit: 1.5g`
+- Quality too poor → `bash scripts/switch-model.sh qwen2.5:0.5b` and raise ollama `mem_limit` to `1.2g`
+- Need better answers → `bash scripts/switch-model.sh qwen2.5:1.5b` with ollama `mem_limit: 1.5g`
+- Still need more → `bash scripts/switch-model.sh llama3.2:1b` with ollama `mem_limit: 1.5g`
 
 **Settings that do not work** (do not use): `OLLAMA_LOAD_IN_4BIT` (not an Ollama env var — models are already quantized), `OLLAMA_NUM_GPU=0` (CPU is default without GPU devices).
 
@@ -230,6 +386,8 @@ First chat after cold start may take 3–5 s (model load). Subsequent chats shou
 **Advisor degraded / model not ready**:
 
 ```bash
+bash scripts/select-model.sh
+# or, if model is already set in compose:
 bash scripts/preload-model.sh
 ```
 
