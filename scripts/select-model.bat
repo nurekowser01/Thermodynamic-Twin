@@ -2,12 +2,16 @@
 setlocal enabledelayedexpansion
 cd /d "%~dp0.."
 
+if not defined COMPOSE_FILE set COMPOSE_FILE=docker-compose.cpu.yml
+
 echo ========================================
 echo   LLM Model Selector
 echo ========================================
 echo.
+echo Compose file: %COMPOSE_FILE%
+echo.
 
-for /f "tokens=2 delims=: " %%a in ('findstr /B "      OLLAMA_MODEL:" docker-compose.yml') do set CURRENT=%%a
+for /f "tokens=2 delims=: " %%a in ('findstr /B "      OLLAMA_MODEL:" %COMPOSE_FILE%') do set CURRENT=%%a
 echo Current model: %CURRENT%
 echo.
 echo Select a model:

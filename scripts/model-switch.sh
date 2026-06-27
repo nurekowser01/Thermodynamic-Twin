@@ -1,24 +1,30 @@
 # Shared model switch helpers — source from select-model.sh / switch-model.sh
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.cpu.yml}"
+COMPOSE_PATH="$ROOT/$COMPOSE_FILE"
+
+compose() {
+  docker compose -f "$COMPOSE_PATH" "$@"
+}
 
 get_current_model() {
-  grep '^      OLLAMA_MODEL:' "$ROOT/docker-compose.yml" | sed 's/.*OLLAMA_MODEL: //' | tr -d ' '
+  grep '^      OLLAMA_MODEL:' "$COMPOSE_PATH" | sed 's/.*OLLAMA_MODEL: //' | tr -d ' '
 }
 
 model_exists_locally() {
   local model="$1"
-  docker compose exec -T ollama ollama list 2>/dev/null \
+  compose exec -T ollama ollama list 2>/dev/null \
     | awk 'NR>1 {print $1}' \
     | grep -qxF "$model"
 }
 
 ensure_ollama_running() {
   cd "$ROOT"
-  echo "Starting Ollama..."
-  docker compose up -d ollama
+  echo "Starting Ollama ($COMPOSE_FILE)..."
+  compose up -d ollama
   echo "Waiting for Ollama..."
   for _ in $(seq 1 30); do
-    if docker compose exec -T ollama ollama list >/dev/null 2>&1; then
+    if compose exec -T ollama ollama list >/dev/null 2>&1; then
       return 0
     fi
     sleep 2
@@ -34,30 +40,30 @@ pull_model() {
     return 0
   fi
   echo "Pulling model: $model"
-  docker compose exec -T ollama ollama pull "$model"
+  compose exec -T ollama ollama pull "$model"
 }
 
 update_compose_model() {
   local model="$1"
   cd "$ROOT"
   if [[ "$OSTYPE" == darwin* ]]; then
-    sed -i '' "s/^      OLLAMA_MODEL: .*/      OLLAMA_MODEL: ${model}/" docker-compose.yml
+    sed -i '' "s/^      OLLAMA_MODEL: .*/      OLLAMA_MODEL: ${model}/" "$COMPOSE_PATH"
   else
-    sed -i "s/^      OLLAMA_MODEL: .*/      OLLAMA_MODEL: ${model}/" docker-compose.yml
+    sed -i "s/^      OLLAMA_MODEL: .*/      OLLAMA_MODEL: ${model}/" "$COMPOSE_PATH"
   fi
-  echo "Updated docker-compose.yml -> OLLAMA_MODEL: $model"
+  echo "Updated $COMPOSE_FILE -> OLLAMA_MODEL: $model"
 }
 
 restart_advisor() {
   cd "$ROOT"
   echo "Restarting llm-advisor..."
-  docker compose up -d --force-recreate llm-advisor
+  compose up -d --force-recreate llm-advisor
 }
 
 warm_model() {
   local model="$1"
   echo "Warming model in memory..."
-  docker compose exec -T ollama ollama run "$model" "ping" --verbose=false >/dev/null 2>&1 || true
+  compose exec -T ollama ollama run "$model" "ping" --verbose=false >/dev/null 2>&1 || true
 }
 
 check_health() {
@@ -68,7 +74,7 @@ check_health() {
     return 0
   fi
   echo "Could not reach http://localhost:8080/api/llm/health"
-  echo "Ensure the frontend container is running: docker compose up -d"
+  echo "Ensure the frontend container is running: compose up -d"
   return 1
 }
 
@@ -89,5 +95,6 @@ apply_model() {
 
   echo ""
   echo "Model switch complete: $model"
+  echo "Compose file: $COMPOSE_FILE"
   echo "Open http://localhost:8080"
 }
