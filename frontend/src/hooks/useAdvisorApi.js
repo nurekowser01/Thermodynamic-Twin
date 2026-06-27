@@ -6,11 +6,12 @@ export async function checkAdvisorHealth() {
   return r.json()
 }
 
-export async function sendMessage({ message, messages = [], context }) {
+export async function sendMessage({ message, messages = [], context, signal }) {
   const r = await fetch(`${BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, messages, context }),
+    signal,
   })
   if (!r.ok) {
     const err = await r.json().catch(() => ({}))

@@ -9,6 +9,17 @@ const GT_KEYS = [
   'T5_TII_oem_C', 'T4_TIT_C', 'P_eff_hPa', 'P_compressor_MW',
 ]
 
+const LOADING_PHASES = [
+  'Analysing plant data…',
+  'Checking operating conditions…',
+  'Calculating thermodynamics…',
+  'Reviewing heat rate and efficiency…',
+  'Evaluating compressor performance…',
+  'Preparing response…',
+]
+
+const PHASE_INTERVAL_MS = 3000
+
 function pick(obj, keys) {
   if (!obj) return null
   const out = {}
@@ -52,8 +63,6 @@ function buildContext({ mode, fuel, inputs, result }) {
   }
 }
 
-const ANALYSIS_TIMEOUT_MS = 120_000
-
 function formatTime(ts) {
   return new Date(ts).toLocaleTimeString([], {
     hour: '2-digit',
@@ -62,49 +71,36 @@ function formatTime(ts) {
   })
 }
 
-function AnalysingIndicator({ startTime, timeoutMs = ANALYSIS_TIMEOUT_MS }) {
-  const [pct, setPct] = useState(0)
+function formatDurationSec(sec) {
+  if (sec < 10) return `${sec.toFixed(1)}s`
+  return `${Math.round(sec)}s`
+}
+
+function formatMessageMeta(message) {
+  const time = formatTime(message.ts)
+  if (message.role === 'assistant' && message.durationSec != null) {
+    return `${time} · ${formatDurationSec(message.durationSec)}`
+  }
+  return time
+}
+
+function AnalysingIndicator() {
+  const [phase, setPhase] = useState(0)
 
   useEffect(() => {
-    if (!startTime) return
-
-    const tick = () => {
-      const elapsed = Date.now() - startTime
-      setPct(Math.min(100, Math.round((elapsed / timeoutMs) * 100)))
-    }
-
-    tick()
-    const id = setInterval(tick, 150)
+    const id = setInterval(
+      () => setPhase(p => (p + 1) % LOADING_PHASES.length),
+      PHASE_INTERVAL_MS,
+    )
     return () => clearInterval(id)
-  }, [startTime, timeoutMs])
-
-  const atLimit = pct >= 100
+  }, [])
 
   return (
-    <div
-      className="advisor-progress"
-      role="progressbar"
-      aria-live="polite"
-      aria-valuenow={pct}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-label={`Analysing, ${pct} percent`}
-    >
-      <div className="advisor-progress__header">
-        <span className="advisor-progress__label">Analysing…</span>
-        <span className="advisor-progress__pct">{pct}%</span>
-      </div>
-      <div className="advisor-progress__track">
-        <div
-          className={`advisor-progress__fill${atLimit ? ' advisor-progress__fill--pulse' : ''}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      {atLimit && (
-        <div className="advisor-progress__note">
-          Still working — large models may need more time.
-        </div>
-      )}
+    <div className="advisor-status" role="status" aria-live="polite">
+      <span className="advisor-status__spinner" aria-hidden="true" />
+      <span className="advisor-status__text" key={phase}>
+        {LOADING_PHASES[phase]}
+      </span>
     </div>
   )
 }
@@ -113,10 +109,10 @@ export default function AssistantTab({ mode, fuel, inputs, result }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [analysisStart, setAnalysisStart] = useState(null)
   const [error, setError] = useState(null)
   const [healthLine, setHealthLine] = useState('Checking advisor…')
   const bottomRef = useRef(null)
+  const abortRef = useRef(null)
 
   useEffect(() => {
     checkAdvisorHealth()
@@ -138,31 +134,55 @@ export default function AssistantTab({ mode, fuel, inputs, result }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
+  useEffect(() => () => abortRef.current?.abort(), [])
+
+  const handleCancel = () => {
+    abortRef.current?.abort()
+  }
+
   const handleSend = async () => {
     const text = input.trim()
     if (!text || loading) return
 
     setInput('')
     setError(null)
-    setAnalysisStart(Date.now())
     setLoading(true)
+
+    const controller = new AbortController()
+    abortRef.current = controller
 
     const history = messages.map(m => ({ role: m.role, content: m.content }))
     const sentAt = Date.now()
     setMessages(prev => [...prev, { role: 'user', content: text, ts: sentAt }])
+
+    const requestStart = Date.now()
 
     try {
       const res = await sendMessage({
         message: text,
         messages: history,
         context: buildContext({ mode, fuel, inputs, result }),
+        signal: controller.signal,
       })
-      setMessages(prev => [...prev, { role: 'assistant', content: res.reply, ts: Date.now() }])
+      const durationSec = (Date.now() - requestStart) / 1000
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: res.reply,
+          ts: Date.now(),
+          durationSec,
+        },
+      ])
     } catch (e) {
-      setError(e.message)
+      if (e.name === 'AbortError') {
+        setError('Request cancelled.')
+      } else {
+        setError(e.message)
+      }
     } finally {
+      abortRef.current = null
       setLoading(false)
-      setAnalysisStart(null)
     }
   }
 
@@ -183,7 +203,7 @@ export default function AssistantTab({ mode, fuel, inputs, result }) {
       )}
 
       <div className="assistant-messages">
-        {messages.length === 0 && (
+        {messages.length === 0 && !loading && (
           <div className="assistant-empty">
             Ask about efficiency, heat rate, filter maintenance, or operating conditions.
           </div>
@@ -193,13 +213,11 @@ export default function AssistantTab({ mode, fuel, inputs, result }) {
             key={m.ts ?? i}
             className={`assistant-bubble assistant-bubble--${m.role}`}
           >
-            <div className="assistant-bubble__time">{formatTime(m.ts)}</div>
+            <div className="assistant-bubble__time">{formatMessageMeta(m)}</div>
             <div className="assistant-bubble__text">{m.content}</div>
           </div>
         ))}
-        {loading && analysisStart && (
-          <AnalysingIndicator startTime={analysisStart} />
-        )}
+        {loading && <AnalysingIndicator />}
         <div ref={bottomRef} />
       </div>
 
@@ -215,13 +233,24 @@ export default function AssistantTab({ mode, fuel, inputs, result }) {
           rows={2}
           disabled={loading}
         />
-        <button
-          className={`calc-btn assistant-send${loading ? ' loading' : ''}`}
-          onClick={handleSend}
-          disabled={loading || !input.trim()}
-        >
-          {loading ? 'Analysing…' : 'Send'}
-        </button>
+        {loading ? (
+          <button
+            type="button"
+            className="calc-btn assistant-cancel"
+            onClick={handleCancel}
+          >
+            Cancel
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="calc-btn assistant-send"
+            onClick={handleSend}
+            disabled={!input.trim()}
+          >
+            Send
+          </button>
+        )}
       </div>
     </div>
   )
