@@ -1,7 +1,7 @@
 // hooks/useGTApi.js
 // Centralised API calls to the FastAPI backend
 
-const BASE = '/api'
+const BASE = import.meta.env.VITE_API_BASE || '/api'
 
 export async function fetchStaticData() {
   const r = await fetch(`${BASE}/static-data`)

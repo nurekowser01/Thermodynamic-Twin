@@ -1,4 +1,4 @@
-const BASE = '/api/llm'
+const BASE = import.meta.env.VITE_LLM_BASE || '/api/llm'
 
 export async function checkAdvisorHealth() {
   const r = await fetch(`${BASE}/health`)
