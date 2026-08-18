@@ -29,20 +29,14 @@ sirajganj_app/
 │           ├── ThermodynamicsTab.jsx ← T-s and P-h Brayton cycle diagrams
 │           ├── EnergyTab.jsx       ← Sankey energy flow + heat balance table
 │           ├── FilterTab.jsx       ← ΔP degradation curves + live hour inputs
-│           └── AssistantTab.jsx    ← LLM advisor chat (Docker only)
-├── llm-service/    ← Independent LLM advisor API (port 11435)
-├── docker-compose.cpu.yml   ← CPU-only stack (16GB RAM)
-├── docker-compose.gpu.yml   ← NVIDIA GPU stack (4GB VRAM)
+│           └── AssistantTab.jsx    ← LLM advisor chat (Gemini)
+├── llm-service/    ← Gemini advisor API (port 11435)
+├── docker-compose.cpu.yml   ← Local Docker: backend + Gemini advisor + frontend
+├── render.yaml              ← Render Blueprint (full stack)
 ├── scripts/
 │   ├── compose-cpu.sh       ← docker compose -f docker-compose.cpu.yml
-│   ├── compose-gpu.sh       ← docker compose -f docker-compose.gpu.yml
-│   ├── preload-model.sh   ← Pull and warm Ollama model (Docker)
-│   ├── preload-model.bat
-│   ├── select-model.sh    ← Interactive model picker + compose update
-│   ├── select-model.bat
-│   ├── switch-model.sh    ← Quick model switch (CLI arg)
-│   └── switch-model.bat
-├── run_dev.sh      ← Linux/macOS launcher
+│   └── compose-gpu.sh
+├── run_dev.sh      ← Linux/macOS launcher (solver + UI, no advisor)
 ├── run_dev.bat     ← Windows launcher
 └── README.md
 ```
@@ -51,12 +45,15 @@ sirajganj_app/
 
 ## Prerequisites
 
-**Docker (recommended — full app + LLM Advisor)**
+**Docker (local — full app + Gemini Advisor)**
 
 - Docker Engine + Docker Compose v2
-- **CPU mode:** ~4 GB container RAM (`docker-compose.cpu.yml`) — 16 GB host RAM recommended
-- **GPU mode:** NVIDIA drivers + Container Toolkit (`docker-compose.gpu.yml`) — GeForce 940M / 4 GB VRAM tested
-- Default model for both profiles: **`qwen2.5:0.5b`**
+- A Google Gemini API key in `.env` (`GEMINI_API_KEY`)
+
+**Render (production — full stack)**
+
+- GitHub repo connected to Render
+- Same Gemini key as a **secret** on the `tt-llm` service (never committed)
 
 **Local development only (no Assistant tab)**
 
@@ -72,73 +69,50 @@ cd frontend && npm install
 
 ---
 
+## Deploy on Render (full stack)
+
+This branch (`render-gemini`) hosts **frontend + CoolProp solver + Gemini advisor** on Render. Ollama is not used.
+
+Blueprint: [`render.yaml`](render.yaml)
+
+| Service | Role |
+|---------|------|
+| `tt-frontend` | Public UI (`onrender.com`) |
+| `tt-backend` | FastAPI solver (`/api/*` via nginx) |
+| `tt-llm` | Gemini chat (`/api/llm/*` via nginx) |
+
+```bash
+cp .env.example .env   # set GEMINI_API_KEY locally; do not commit
+git push -u origin render-gemini
+```
+
+In [Render Dashboard](https://dashboard.render.com) → **New** → **Blueprint** → this repo, branch `render-gemini`. Set `GEMINI_API_KEY` on `tt-llm` when prompted (`sync: false`).
+
+First backend build can take several minutes (CoolProp). Free/starter instances sleep when idle.
+
+---
+
 ## Quick start (Docker — full stack)
 
-Pick **one** compose profile. There is no root `docker-compose.yml` — always pass `-f` or use the wrapper scripts.
-
-### CPU mode (16 GB RAM, no GPU)
-
 ```bash
-# 1. Build and start
+cp .env.example .env
+# edit GEMINI_API_KEY=
+
 docker compose -f docker-compose.cpu.yml up -d --build
-
-# 2. Pull and warm the default model
-COMPOSE_FILE=docker-compose.cpu.yml bash scripts/preload-model.sh
-
-# 3. Open the app
 # http://localhost:8080
 ```
 
-### GPU mode (NVIDIA, 4 GB VRAM)
+No model pull/warm step — the advisor calls Google Gemini.
 
-```bash
-# 1. Build and start
-docker compose -f docker-compose.gpu.yml up -d --build
+**Windows:** same compose file; put `GEMINI_API_KEY` in `.env`.
 
-# 2. Pull and warm the default model
-COMPOSE_FILE=docker-compose.gpu.yml bash scripts/preload-model.sh
-
-# 3. Open the app
-# http://localhost:8080
-```
-
-**Shortcut wrappers:**
-
-```bash
-bash scripts/compose-cpu.sh up -d --build
-bash scripts/compose-gpu.sh up -d --build
-```
-
-**Windows** — set `COMPOSE_FILE` before model scripts:
-
-```bat
-set COMPOSE_FILE=docker-compose.cpu.yml
-scripts\preload-model.bat
-```
-
-### What step 1 starts
+### What this starts
 
 | Service | Host URL | Role |
 |---------|----------|------|
 | frontend | http://localhost:8080 | React UI + nginx proxy |
 | backend | via `/api/*` | Thermodynamic solver |
-| llm-advisor | via `/api/llm/*` | Chat API |
-| ollama | internal only | Local LLM inference |
-
-### What step 2 does (`preload-model.sh` / `select-model.sh`)
-
-The model scripts **only** manage Ollama + the advisor — they do **not** rebuild backend/frontend:
-
-1. Starts Ollama (`docker compose -f $COMPOSE_FILE up -d ollama`) if it is not running
-2. Pulls the chosen model (skips if already on disk)
-3. Updates `OLLAMA_MODEL` in the active compose file (`docker-compose.cpu.yml` or `docker-compose.gpu.yml`)
-4. **Recreates** `llm-advisor` so it picks up the new model env
-5. **Warms** the model in Ollama memory (`ollama run <model> ping`)
-6. Prints advisor health from `http://localhost:8080/api/llm/health`
-
-Scripts default to `COMPOSE_FILE=docker-compose.cpu.yml`. Set `COMPOSE_FILE=docker-compose.gpu.yml` for GPU mode.
-
-**You do not need** `docker compose build` for a model change — only Ollama pull + `llm-advisor` restart (handled by the script).
+| llm-advisor | via `/api/llm/*` | Gemini chat API |
 
 ### Verify everything is up
 
@@ -146,10 +120,9 @@ Scripts default to `COMPOSE_FILE=docker-compose.cpu.yml`. Set `COMPOSE_FILE=dock
 # Solver
 curl http://localhost:8080/api/health
 
-# LLM advisor (healthy = model loaded)
+# Gemini advisor
 curl http://localhost:8080/api/llm/health
 
-# All containers (CPU example)
 docker compose -f docker-compose.cpu.yml ps
 ```
 
@@ -157,42 +130,16 @@ docker compose -f docker-compose.cpu.yml ps
 
 ## GPU vs CPU Docker modes
 
-Both profiles use the same default model (**`qwen2.5:0.5b`**) and share the `ollama_data` volume (`name: thermodynamic-twin`). Switching GPU ↔ CPU does **not** require re-pulling the model — stop one stack before starting the other (port `8080`).
-
-| | GPU (`docker-compose.gpu.yml`) | CPU (`docker-compose.cpu.yml`) |
-|--|-------------------------------|--------------------------------|
-| Inference | NVIDIA GPU (`runtime: nvidia`) | CPU threads (`OLLAMA_NUM_THREADS`) |
-| Model | `qwen2.5:0.5b` | `qwen2.5:0.5b` |
-| Context | 4096 | 2048 |
-| Max tokens | 256 | 128 |
-| ollama `mem_limit` | 4g | 2g |
-| llm-advisor `mem_limit` | 2g | 1g |
-
-### Start / stop
+On **`render-gemini`**, both compose files run **backend + Gemini advisor + frontend**. There is no Ollama service. Use `docker-compose.cpu.yml` locally.
 
 ```bash
-# GPU
-docker compose -f docker-compose.gpu.yml up -d --build
-docker compose -f docker-compose.gpu.yml down
-
-# CPU
 docker compose -f docker-compose.cpu.yml up -d --build
 docker compose -f docker-compose.cpu.yml down
 ```
 
-### Switch GPU → CPU
-
-```bash
-docker compose -f docker-compose.gpu.yml down
-docker compose -f docker-compose.cpu.yml up -d
-COMPOSE_FILE=docker-compose.cpu.yml bash scripts/preload-model.sh
-```
-
-### Optional `.env`
-
 ```bash
 cp .env.example .env
-# Edit COMPOSE_FILE, CORS_ORIGINS, LOG_LEVEL, FRONTEND_PORT
+# Set GEMINI_API_KEY=
 ```
 
 ### GPU note (940M / 4 GB VRAM)

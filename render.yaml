@@ -1,0 +1,60 @@
+# Render Blueprint — full stack (frontend + CoolProp solver + Gemini advisor)
+# https://render.com/docs/blueprint-spec
+#
+# After first deploy, set GEMINI_API_KEY on tt-llm in the dashboard
+# (sync: false means it is not stored in this file).
+
+services:
+  - type: web
+    name: tt-backend
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "10000"
+
+  - type: web
+    name: tt-llm
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./llm-service/Dockerfile
+    dockerContext: ./llm-service
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: GEMINI_REQUEST_TIMEOUT
+        value: "60"
+      - key: TEMPERATURE
+        value: "0.0"
+      - key: MAX_TOKENS
+        value: "256"
+      - key: MAX_CONTEXT_CHARS
+        value: "3000"
+      - key: MAX_CHAT_HISTORY
+        value: "4"
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: LOG_LEVEL
+        value: WARNING
+
+  - type: web
+    name: tt-frontend
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: BACKEND_URL
+        value: http://tt-backend:10000
+      - key: LLM_URL
+        value: http://tt-llm:10000

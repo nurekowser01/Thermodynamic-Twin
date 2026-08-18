@@ -29,7 +29,6 @@ class ChatResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: Literal["healthy", "degraded"]
-    ollama_reachable: bool
     model_ready: bool
     model: str
     service: str = "llm-advisor"

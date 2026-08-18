@@ -16,4 +16,5 @@ WORKDIR /app
 COPY --from=builder /root/.local /root/.local
 COPY . .
 ENV PATH=/root/.local/bin:$PATH
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8749"]
+ENV PORT=8749
+CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port ${PORT}"]

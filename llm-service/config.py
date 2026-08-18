@@ -1,12 +1,11 @@
 import os
 
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://ollama:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "smollm:135m")
-OLLAMA_REQUEST_TIMEOUT = int(os.environ.get("OLLAMA_REQUEST_TIMEOUT", "90"))
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
+GEMINI_REQUEST_TIMEOUT = int(os.environ.get("GEMINI_REQUEST_TIMEOUT", "60"))
 TEMPERATURE = float(os.environ.get("TEMPERATURE", "0.0"))
 MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "256"))
-NUM_CTX = int(os.environ.get("NUM_CTX", "2048"))
-MAX_CONTEXT_CHARS = int(os.environ.get("MAX_CONTEXT_CHARS", "1500"))
+MAX_CONTEXT_CHARS = int(os.environ.get("MAX_CONTEXT_CHARS", "3000"))
 MAX_CHAT_HISTORY = int(os.environ.get("MAX_CHAT_HISTORY", "4"))
 CORS_ORIGINS = [
     o.strip()

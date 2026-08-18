@@ -14,4 +14,5 @@ RUN chown -R advisor:advisor /app
 USER advisor
 
 EXPOSE 11435
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "11435"]
+ENV PORT=11435
+CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT}"]

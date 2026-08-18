@@ -26,6 +26,14 @@ _NET_KEYS = ("P_net_MW", "P_GT_MW", "P_aux_total_MW", "P_gbc_MW")
 
 _HEAT_BALANCE_KEYS = ("Q_fuel_MW", "Q_exhaust_MW", "Q_radiation_MW", "eta_th_pct")
 
+_FILTER_KEYS = (
+    "dp_coalescer_Pa",
+    "dp_prefilter_Pa",
+    "dp_finefilter_Pa",
+    "dp_total_Pa",
+    "dp_total_hPa",
+)
+
 
 def _pick(src: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
     return {k: src[k] for k in keys if k in src and src[k] is not None}
@@ -69,11 +77,18 @@ def slim_plant_context(context: dict[str, Any] | None) -> dict[str, Any] | None:
         if hb_slim:
             slim_balance["heat_balance"] = hb_slim
 
-    if slim_gt or slim_balance:
+    filter_src = result.get("filter") if isinstance(result.get("filter"), dict) else {}
+    if not filter_src and isinstance(gt.get("filter"), dict):
+        filter_src = gt["filter"]
+    filt_slim = _pick(filter_src, _FILTER_KEYS) if filter_src else {}
+
+    if slim_gt or slim_balance or filt_slim:
         slim["result"] = {}
         if slim_gt:
             slim["result"]["gt"] = slim_gt
         if slim_balance:
             slim["result"]["balance"] = slim_balance
+        if filt_slim:
+            slim["result"]["filter"] = filt_slim
 
     return slim or None

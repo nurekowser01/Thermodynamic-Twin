@@ -119,10 +119,8 @@ export default function AssistantTab({ mode, fuel, inputs, result }) {
       .then(h => {
         if (h.status === 'healthy') {
           setHealthLine(`Advisor: healthy (${h.model})`)
-        } else if (!h.ollama_reachable) {
-          setHealthLine('Advisor: degraded — Ollama not reachable')
         } else if (!h.model_ready) {
-          setHealthLine(`Advisor: degraded — run ollama pull ${h.model}`)
+          setHealthLine('Advisor: degraded — GEMINI_API_KEY not set')
         } else {
           setHealthLine('Advisor: degraded')
         }
