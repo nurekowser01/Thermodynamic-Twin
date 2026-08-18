@@ -1,8 +1,8 @@
-# Render Blueprint — full stack (frontend + CoolProp solver + Gemini advisor)
-# https://render.com/docs/blueprint-spec
-#
-# After first deploy, set GEMINI_API_KEY on tt-llm in the dashboard
-# (sync: false means it is not stored in this file).
+# Render Blueprint — Docker layout (dashboard Blueprint).
+# MCP also created native Python services on the free plan:
+#   tt-solver  https://tt-solver.onrender.com
+#   tt-llm     https://tt-llm.onrender.com
+# Frontend static site uses VITE_API_BASE / VITE_LLM_BASE at build time.
 
 services:
   - type: web
